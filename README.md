@@ -2,11 +2,15 @@
 Create a release using semver
 
 # one branch setup
-- yarn release-semver --sourceBranch release --commands [tag,push]
+```
+yarn release-semver --sourceBranch release --commands [tag,push]
+```
 Check if your local git copy is clean and up to speed, tag the branch.
 
 # master (development) and release (stable) branch setup
-- yarn release-semver
+```
+yarn release-semver
+```
 Check if your local git copy is clean and up to speed, check if master contains all commits of release branch, merge master into release and tag the release branch.
 
 # options
