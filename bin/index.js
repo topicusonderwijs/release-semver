@@ -15,28 +15,21 @@ const script = async () => {
     shell.config.verbose = options.verbose;
 
     cleanWorkdir(options);
-    refresh(options.upstream);
-
-    await branchCheck(options);
-    await upstreamCheck(options);
-
-    let spinner = ora(`Synchronizing branches...`).start();
-    checkout(spinner, options.sourceBranch);
-    fastforward(spinner, options.sourceBranch);
-    checkout(spinner, options.targetBranch);
-    fastforward(spinner, options.targetBranch);
-    checkout(spinner, options.sourceBranch);
-    spinner.succeed('Branches synchronized');
-
+    fetch(options.upstream);
+    sourceBranchCheck(options);
+    targetBranchCheck(options);
+    sourceUpstreamCheck(options);
+    targetUpstreamCheck(options);
+    fastForwardAll(options);
     uptodateCheck(options);
 
-    const currentVersion = latestVersion(spinner, options);
+    const currentVersion = latestVersion(options);
     const newVersion = await incrementVersion(currentVersion || '0.0.0');
     if (newVersion) {
         //update version in package.json ?
         //if so, do commit
 
-        merge(options);
+        merge(newVersion, options);
         tag(newVersion, options);
         push(newVersion, options);
     }
@@ -58,15 +51,13 @@ const getOptions = () => {
         sourceBranch: 'master',
         targetBranch: 'release',
         upstream: 'origin',
-        merge: true,
-        tag: true,
         tagPattern: '',
         prefix: false,
         silent: true,
         verbose: false
     };
 
-    const availableOptionKeys = ['sourceBranch', 'targetBranch', 'upstream', 'merge', 'tag', 'prefix', 'silent', 'verbose'];
+    const availableOptionKeys = ['sourceBranch', 'targetBranch', 'upstream', 'prefix', 'silent', 'verbose'];
     for (let i = 2; i < process.argv.length; i++) {
         const optionKey = process.argv[i].split('--')[1];
         if (availableOptionKeys.find(val => val === optionKey)) {
@@ -89,7 +80,7 @@ const cleanWorkdir = options => {
     spinner.succeed('Working dir is clean.');
 };
 
-const refresh = upstream => {
+const fetch = upstream => {
     const spinner = ora('Updating repo...').start();
 
     checkShellResponse(spinner, shell.exec(`git fetch ${upstream} --tags --prune`));
@@ -97,7 +88,7 @@ const refresh = upstream => {
     spinner.succeed('Repo updated.');
 };
 
-const branchCheck = async options => {
+const sourceBranchCheck = options => {
     let spinner = ora(`Checking if source branch '${options.sourceBranch}' exists...`).start();
 
     let res = shell.exec(`git rev-parse --verify refs/heads/${options.sourceBranch}`);
@@ -115,8 +106,14 @@ const branchCheck = async options => {
     }
     checkout(spinner, options.sourceBranch);
     spinner.succeed(`Source branch '${options.sourceBranch}' found.`);
+};
 
-    spinner = ora(`Checking if target branch '${options.targetBranch}' exists...`).start();
+const targetBranchCheck = options => {
+    if (options.sourceBranch === options.targetBranch) {
+        return;
+    }
+
+    let spinner = ora(`Checking if target branch '${options.targetBranch}' exists...`).start();
     res = shell.exec(`git rev-parse --verify refs/heads/${options.targetBranch}`);
     if (res.stderr) {
         spinner.color = 'blue';
@@ -132,7 +129,7 @@ const branchCheck = async options => {
     spinner.succeed(`Target branch '${options.targetBranch}' found.`);
 };
 
-const upstreamCheck = async options => {
+const sourceUpstreamCheck = options => {
     let spinner = ora(`Checking if source branch ${options.sourceBranch} has upstream...`).start();
 
     res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.sourceBranch}`);
@@ -142,8 +139,14 @@ const upstreamCheck = async options => {
         shell.exit(1);
     }
     spinner.succeed(`Source branch '${options.sourceBranch}' has upstream '${options.upstream}'.`);
+};
 
-    spinner = ora(`Checking if target branch ${options.targetBranch} has upstream...`).start();
+const targetUpstreamCheck = options => {
+    if (options.sourceBranch === options.targetBranch) {
+        return;
+    }
+
+    let spinner = ora(`Checking if target branch ${options.targetBranch} has upstream...`).start();
     res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.targetBranch}`);
     checkShellResponse(spinner, res);
     if (options.upstream + '/' + options.targetBranch != trim(res.stdout)) {
@@ -151,6 +154,19 @@ const upstreamCheck = async options => {
         shell.exit(1);
     }
     spinner.succeed(`Target branch '${options.targetBranch}' has upstream '${options.upstream}'.`);
+};
+
+const fastForwardAll = (options) => {
+    let spinner = ora(`Synchronizing branches...`).start();
+    checkout(spinner, options.sourceBranch);
+    fastforward(spinner, options.sourceBranch);
+
+    if (options.sourceBranch !== options.targetBranch) {
+        checkout(spinner, options.targetBranch);
+        fastforward(spinner, options.targetBranch);
+        checkout(spinner, options.sourceBranch);
+    }
+    spinner.succeed('Branches synchronized');
 };
 
 const checkout = (spinner, branch) => {
@@ -170,6 +186,10 @@ const fastforward = (spinner, branch) => {
 };
 
 const uptodateCheck = options => {
+    if (options.sourceBranch === options.targetBranch) {
+        return;
+    }
+
     let spinner = ora(`Checking if ${options.sourceBranch} is uptodate with ${options.targetBranch}...`).start();
 
     const res = shell.exec(`git rev-list "${options.upstream}/${options.sourceBranch}..${options.upstream}/${options.targetBranch}" --no-merges | wc -l`);
@@ -232,10 +252,15 @@ const incrementVersion = async version => {
     }
 };
 
-const merge = (options) => {
+const merge = (newVersion, options) => {
+    if (options.sourceBranch === options.targetBranch) {
+        return;
+    }
+
     let spinner = ora(`Merging ${options.sourceBranch} into ${options.targetBranch}`).start();
     checkout(spinner, options.targetBranch);
-    checkShellResponse(spinner, shell.exec(`git merge --no-ff --no-edit ${options.sourceBranch}`));
+    const prefix = options.prefix ? options.prefix + '/' : '';
+    checkShellResponse(spinner, shell.exec(`git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`));
 
     spinner.succeed(`Merged ${options.sourceBranch} into ${options.targetBranch}`);
 };
@@ -252,8 +277,13 @@ const tag = (newVersion, options) => {
 const push = (newVersion, options) => {
     const prefix = options.prefix ? options.prefix + '/' : '';
 
-    let spinner = ora(`Pushing ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion} to upstream '${options.upstream}'...`).start();
-    checkShellResponse(spinner, shell.exec(`git push ${options.upstream} ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion}`));
+    let spinner = ora(`Pushing stuff to upstream '${options.upstream}'...`).start();
+    if (options.sourceBranch === options.targetBranch) {
+        checkShellResponse(spinner, shell.exec(`git push ${options.upstream} ${options.sourceBranch} ${prefix}${newVersion}`));
+    } else {
+        checkShellResponse(spinner, shell.exec(`git push ${options.upstream} ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion}`));
+    }
+
     spinner.succeed(`Things got pushed. We're done. 🎉🎉🎉`);
 }
 
