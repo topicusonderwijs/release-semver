@@ -1,7 +1,9 @@
 {
-  "name": "release-semver",
+  "name": "@topicusonderwijs/release-semver",
   "version": "1.0.0",
   "description": "Easily create a release with a semver version number",
+  "homepage": "https://github.com/topicusonderwijs/release-semver#readme",
+  "main": "bin/index.js",
   "scripts": {
     "release": "release-semver"
   },
@@ -19,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/topicusonderwijs/release-semver"
+    "url": "git+https://github.com/topicusonderwijs/release-semver.git"
   },
   "author": "Hielke Hoeve",
   "license": "MIT",
@@ -30,5 +32,6 @@
     "shelljs": "^0.8.3",
     "trim": "^0.0.1",
     "ora": "^4.0.4"
-  }
+  },
+  "devDependencies": {}
 }
