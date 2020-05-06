@@ -36,7 +36,7 @@ const script = async () => {
 };
 
 const welcome = (options) => {
-    console.log(chalk.black.bgGreen(`release-semver v1.0.0 running`));
+    console.log(chalk.black.bgGreen(`release-semver running`));
     if(options.dryrun) {
         console.log(`release-semver running in dry mode. Will fetch and checkout but not merge, tag or push.`);
     }
