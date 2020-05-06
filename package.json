@@ -1,6 +1,6 @@
 {
   "name": "@topicusonderwijs/release-semver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Easily create a release with a semver version number",
   "homepage": "https://github.com/topicusonderwijs/release-semver#readme",
   "main": "bin/index.js",
@@ -28,10 +28,10 @@
   "dependencies": {
     "chalk": "^3.0.0",
     "inquirer": "^7.0.0",
+    "ora": "^4.0.4",
     "semver": "^6.3.0",
     "shelljs": "^0.8.3",
-    "trim": "^0.0.1",
-    "ora": "^4.0.4"
+    "trim": "^0.0.1"
   },
   "devDependencies": {}
 }
