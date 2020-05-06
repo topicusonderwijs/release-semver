@@ -15,7 +15,7 @@ const script = async () => {
     gitOrQuit();
 
     cleanWorkdir(options);
-    fetch(options.upstream);
+    fetch(options);
     sourceBranchCheck(options);
     targetBranchCheck(options);
     sourceUpstreamCheck(options);
@@ -75,7 +75,7 @@ const cleanWorkdir = options => {
     const spinner = ora('Checking if working dir is clean...').start();
 
     const res = shell.exec(`git status --porcelain | wc -l`);
-    checkShellResponse(spinner, res);
+    checkShellResponse(options, spinner, res);
     if (parseInt(trim(res.stdout)) > 0) {
         spinner.fail('Working dir must be clean. Please stage and commit your changes.');
         dryRunOrNoDryRun(options, () => shell.exit(1));
@@ -84,10 +84,10 @@ const cleanWorkdir = options => {
     spinner.succeed('Working dir is clean.');
 };
 
-const fetch = upstream => {
+const fetch = options => {
     const spinner = ora('Updating repo...').start();
 
-    checkShellResponse(spinner, shell.exec(`git fetch ${upstream} --tags --prune`));
+    checkShellResponse(options, spinner, shell.exec(`git fetch ${options.upstream} --tags --prune`));
 
     spinner.succeed('Repo updated.');
 };
@@ -100,7 +100,7 @@ const sourceBranchCheck = options => {
         spinner.color = 'blue';
         spinner.text = `Source branch '${options.sourceBranch}' does not exist locally, checking out...`;
 
-        checkShellResponse(spinner, shell.exec(`git checkout -q -B ${options.sourceBranch} ${options.upstream}/${options.sourceBranch}`));
+        checkShellResponse(options, spinner, shell.exec(`git checkout -q -B ${options.sourceBranch} ${options.upstream}/${options.sourceBranch}`));
 
         res = shell.exec(`git rev-parse --verify refs/heads/${options.sourceBranch}`);
         if (res.stderr) {
@@ -108,7 +108,7 @@ const sourceBranchCheck = options => {
             dryRunOrNoDryRun(options, () => shell.exit(1));
         }
     }
-    checkout(spinner, options.sourceBranch);
+    checkout(options, spinner, options.sourceBranch);
     spinner.succeed(`Source branch '${options.sourceBranch}' found.`);
 };
 
@@ -123,7 +123,7 @@ const targetBranchCheck = options => {
         spinner.color = 'blue';
         spinner.text = `Target branch '${options.targetBranch}' does not exist locally, checking out...`;
 
-        checkShellResponse(spinner, shell.exec(`git checkout -q -B ${options.targetBranch} ${options.upstream}/${options.targetBranch}`));
+        checkShellResponse(options, spinner, shell.exec(`git checkout -q -B ${options.targetBranch} ${options.upstream}/${options.targetBranch}`));
         res = shell.exec(`git rev-parse --verify refs/heads/${options.targetBranch}`);
         if (res.stderr) {
             spinner.fail(`Target branch '${options.targetBranch}' does not have an upstream.`);
@@ -137,7 +137,7 @@ const sourceUpstreamCheck = options => {
     let spinner = ora(`Checking if source branch ${options.sourceBranch} has upstream...`).start();
 
     res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.sourceBranch}`);
-    checkShellResponse(spinner, res);
+    checkShellResponse(options, spinner, res);
     if (options.upstream + '/' + options.sourceBranch != trim(res.stdout)) {
         spinner.fail(`Source branch '${options.sourceBranch}' does not have upstream '${options.upstream}'.`);
         dryRunOrNoDryRun(options, () => shell.exit(1));
@@ -152,7 +152,7 @@ const targetUpstreamCheck = options => {
 
     let spinner = ora(`Checking if target branch ${options.targetBranch} has upstream...`).start();
     res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.targetBranch}`);
-    checkShellResponse(spinner, res);
+    checkShellResponse(options, spinner, res);
     if (options.upstream + '/' + options.targetBranch != trim(res.stdout)) {
         spinner.fail(`Target branch '${options.targetBranch}' does not have upstream '${options.upstream}'.`);
         dryRunOrNoDryRun(options, () => shell.exit(1));
@@ -162,31 +162,31 @@ const targetUpstreamCheck = options => {
 
 const fastForwardAll = (options) => {
     let spinner = ora(`Synchronizing branches...`).start();
-    checkout(spinner, options.sourceBranch);
-    fastforward(spinner, options.sourceBranch);
+    checkout(options, spinner, options.sourceBranch);
+    fastforward(options, spinner, options.sourceBranch);
 
     if (options.sourceBranch !== options.targetBranch) {
-        checkout(spinner, options.targetBranch);
-        fastforward(spinner, options.targetBranch);
-        checkout(spinner, options.sourceBranch);
+        checkout(options, spinner, options.targetBranch);
+        fastforward(options, spinner, options.targetBranch);
+        checkout(options, spinner, options.sourceBranch);
     }
     spinner.succeed('Branches synchronized');
 };
 
-const checkout = (spinner, branch) => {
+const checkout = (options, spinner, branch) => {
     if (spinner) {
         spinner.color = 'blue';
         spinner.text = `Checking out ${branch}...`;
     }
-    checkShellResponse(spinner, shell.exec(`git checkout ${branch} -q`));
+    checkShellResponse(options, spinner, shell.exec(`git checkout ${branch} -q`));
 };
 
-const fastforward = (spinner, branch) => {
+const fastforward = (options, spinner, branch) => {
     if (spinner) {
         spinner.color = 'blue';
         spinner.text = `Fast-forwarding ${branch}...`;
     }
-    checkShellResponse(spinner, shell.exec(`git fast-forward ${branch}`));
+    checkShellResponse(options, spinner, shell.exec(`git fast-forward ${branch}`));
 };
 
 const uptodateCheck = options => {
@@ -197,7 +197,7 @@ const uptodateCheck = options => {
     let spinner = ora(`Checking if ${options.sourceBranch} is uptodate with ${options.targetBranch}...`).start();
 
     const res = shell.exec(`git rev-list "${options.upstream}/${options.sourceBranch}..${options.upstream}/${options.targetBranch}" --no-merges | wc -l`);
-    checkShellResponse(spinner, res);
+    checkShellResponse(options, spinner, res);
     if (parseInt(trim(res.stdout)) > 0) {
         spinner.fail(`Not all commits on ${options.targetBranch} are merged back into ${options.sourceBranch}.\n` +
             `Please merge the following commits back into ${options.sourceBranch}:`);
@@ -213,9 +213,8 @@ const latestVersion = (options) => {
     let version = null;
 
     const ref = shell.exec(`git rev-parse --verify refs/remotes/${options.upstream}/${options.sourceBranch}`);
-    checkShellResponse(spinner, ref);
+    checkShellResponse(options, spinner, ref);
     const tag = shell.exec(`git describe --tag ${ref}`);
-    checkShellResponse(spinner, tag);
 
     if (tag.code !== 128) {
         version = semver.valid(semver.coerce(tag.stdout, {loose: true}));
@@ -262,9 +261,9 @@ const merge = (newVersion, options) => {
     }
 
     let spinner = ora(`Merging ${options.sourceBranch} into ${options.targetBranch}`).start();
-    checkout(spinner, options.targetBranch);
+    checkout(options, spinner, options.targetBranch);
     const prefix = options.prefix ? options.prefix + '/' : '';
-    checkShellResponse(spinner, shellExecOrDryrun(options,`git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`));
+    checkShellResponse(options, spinner, shellExecOrDryrun(options,`git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`));
 
     spinner.succeed(`Merged ${options.sourceBranch} into ${options.targetBranch}`);
 };
@@ -272,7 +271,7 @@ const merge = (newVersion, options) => {
 const tag = (newVersion, options) => {
     let spinner = ora(`Tagging release...`).start();
     const prefix = options.prefix ? options.prefix + '/' : '';
-    checkShellResponse(spinner, shellExecOrDryrun(options,
+    checkShellResponse(options, spinner, shellExecOrDryrun(options,
         `git tag -a ${prefix}${newVersion} ${options.targetBranch} ` +
         `-m "Version ${prefix}${newVersion} released on ${new Date().toLocaleDateString()}"`));
     spinner.succeed(`Release tagged.`);
@@ -283,15 +282,15 @@ const push = (newVersion, options) => {
 
     let spinner = ora(`Pushing stuff to upstream '${options.upstream}'...`).start();
     if (options.sourceBranch === options.targetBranch) {
-        checkShellResponse(spinner, shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${prefix}${newVersion}`));
+        checkShellResponse(options, spinner, shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${prefix}${newVersion}`));
     } else {
-        checkShellResponse(spinner, shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion}`));
+        checkShellResponse(options, spinner, shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion}`));
     }
 
     spinner.succeed(`Things got pushed. We're done. 🎉🎉🎉`);
 }
 
-const checkShellResponse = (spinner, res) => {
+const checkShellResponse = (options, spinner, res) => {
     if (res && res.stderr && res.code !== 0) {
         if (spinner) {
             spinner.fail(`The following error occured:\n ${res.stderr}.`);
@@ -311,7 +310,7 @@ const dryRunOrNoDryRun = (options, callback) => {
 
 const shellExecOrDryrun = (options, exec) => {
     if(!options.dryrun) {
-        return shell.ecec(exec);
+        return shell.exec(exec);
     }
     console.log(`dryrun: '${exec}'`);
 
