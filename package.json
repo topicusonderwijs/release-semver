@@ -1,6 +1,6 @@
 {
   "name": "@topicusonderwijs/release-semver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Easily create a release with a semver version number",
   "homepage": "https://github.com/topicusonderwijs/release-semver#readme",
   "main": "bin/index.js",
