@@ -37,7 +37,7 @@ const script = async () => {
 
 const welcome = (options) => {
     console.log(chalk.black.bgGreen(`release-semver running`));
-    if(options.dryrun) {
+    if (options.dryrun) {
         console.log(`release-semver running in dry mode. Will fetch and checkout but not merge, tag or push.`);
     }
 };
@@ -162,11 +162,9 @@ const targetUpstreamCheck = options => {
 
 const fastForwardAll = (options) => {
     let spinner = ora(`Synchronizing branches...`).start();
-    checkout(options, spinner, options.sourceBranch);
     fastforward(options, spinner, options.sourceBranch);
 
     if (options.sourceBranch !== options.targetBranch) {
-        checkout(options, spinner, options.targetBranch);
         fastforward(options, spinner, options.targetBranch);
         checkout(options, spinner, options.sourceBranch);
     }
@@ -186,7 +184,17 @@ const fastforward = (options, spinner, branch) => {
         spinner.color = 'blue';
         spinner.text = `Fast-forwarding ${branch}...`;
     }
-    checkShellResponse(options, spinner, shell.exec(`git fast-forward ${branch}`));
+    checkShellResponse(options, spinner, shell.exec(`git checkout ${branch} -q`));
+
+    let res = shell.exec(`git rev-list "refs/heads/${branch}..refs/remotes/${options.upstream}/${branch}"`);
+    checkShellResponse(options, spinner, res);
+    if (trim(res.stdout) !== "") {
+        spinner.fail(`${branch} has local commits; can't fast-forward`);
+        dryRunOrNoDryRun(options, () => shell.exit(1));
+    }
+
+    res = shell.exec(`git merge --ff-only ${options.upstream}/${branch}`);
+    checkShellResponse(options, spinner, res);
 };
 
 const uptodateCheck = options => {
@@ -196,12 +204,12 @@ const uptodateCheck = options => {
 
     let spinner = ora(`Checking if ${options.sourceBranch} is uptodate with ${options.targetBranch}...`).start();
 
-    const res = shell.exec(`git rev-list "${options.upstream}/${options.sourceBranch}..${options.upstream}/${options.targetBranch}" --no-merges | wc -l`);
+    const res = shell.exec(`git rev-list "${options.sourceBranch}..${options.targetBranch}" --no-merges | wc -l`);
     checkShellResponse(options, spinner, res);
     if (parseInt(trim(res.stdout)) > 0) {
         spinner.fail(`Not all commits on ${options.targetBranch} are merged back into ${options.sourceBranch}.\n` +
             `Please merge the following commits back into ${options.sourceBranch}:`);
-        shell.exec(`git log --oneline --no-merges "${options.upstream}/${options.sourceBranch}..${options.upstream}/${options.targetBranch}"`, {silent: false});
+        shell.exec(`git log --oneline --no-merges "${options.sourceBranch}..${options.targetBranch}"`, {silent: false});
         dryRunOrNoDryRun(options, () => shell.exit(1));
     }
 
@@ -263,7 +271,7 @@ const merge = (newVersion, options) => {
     let spinner = ora(`Merging ${options.sourceBranch} into ${options.targetBranch}`).start();
     checkout(options, spinner, options.targetBranch);
     const prefix = options.prefix ? options.prefix + '/' : '';
-    checkShellResponse(options, spinner, shellExecOrDryrun(options,`git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`));
+    checkShellResponse(options, spinner, shellExecOrDryrun(options, `git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`));
 
     spinner.succeed(`Merged ${options.sourceBranch} into ${options.targetBranch}`);
 };
@@ -303,13 +311,13 @@ const checkShellResponse = (options, spinner, res) => {
 };
 
 const dryRunOrNoDryRun = (options, callback) => {
-    if(!options.dryrun) {
+    if (!options.dryrun) {
         callback();
     }
 }
 
 const shellExecOrDryrun = (options, exec) => {
-    if(!options.dryrun) {
+    if (!options.dryrun) {
         return shell.exec(exec);
     }
     console.log(`dryrun: '${exec}'`);
