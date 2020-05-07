@@ -5,7 +5,7 @@
   "homepage": "https://github.com/topicusonderwijs/release-semver#readme",
   "main": "bin/index.js",
   "scripts": {
-    "release": "release-semver"
+    "release": "np"
   },
   "bin": {
     "release-semver": "bin/index.js"
@@ -33,5 +33,7 @@
     "shelljs": "^0.8.3",
     "trim": "^0.0.1"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "np": "^6.2.3"
+  }
 }
