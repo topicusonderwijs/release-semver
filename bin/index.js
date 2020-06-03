@@ -220,12 +220,11 @@ const latestVersion = (options) => {
     spinner = ora(`Getting lastest version...`).start();
     let version = null;
 
-    const ref = shell.exec(`git rev-parse --verify refs/remotes/${options.upstream}/${options.sourceBranch}`);
+    const ref = shell.exec(`git describe --abbrev=0 refs/remotes/${options.upstream}/${options.sourceBranch}`);
     checkShellResponse(options, spinner, ref);
-    const tag = shell.exec(`git describe --tag ${ref}`);
 
-    if (tag.code !== 128) {
-        version = semver.valid(semver.coerce(tag.stdout, {loose: true}));
+    if (ref.code !== 128) {
+        version = semver.valid(semver.coerce(ref.stdout, {loose: true}));
     }
 
     if (version) {
@@ -240,7 +239,7 @@ const latestVersion = (options) => {
 const incrementVersion = async version => {
     const cleanVersion = semver.parse(semver.clean(version));
     if (cleanVersion) {
-        const newVersion = await inquirer.prompt({
+        let newVersion = await inquirer.prompt({
             type: 'list',
             name: 'semver',
             message: 'Select the new version:',
@@ -256,10 +255,24 @@ const incrementVersion = async version => {
                 {
                     name: `major version (e.g. breaking changes): ${semver.inc(cleanVersion.version, 'major')}`,
                     value: semver.inc(cleanVersion.version, 'major')
+                },
+                {
+                    name: `Provide custom version`,
+                    value: 0
                 }
             ]
         });
-        return newVersion.semver;
+        let promptValue = newVersion.semver;
+        if(promptValue == 0) {
+            newVersion = await inquirer.prompt({
+                type: 'input',
+                name: 'semver',
+                message: 'Enter the new version:'
+            });
+             promptValue = newVersion.semver;
+        }
+
+        return promptValue;
     }
 };
 

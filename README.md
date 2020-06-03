@@ -22,6 +22,7 @@ const options = {
         prefix: false, # if you wish to use a prefix in your tags
         silent: true, # if you wish to see all the git command noise
         verbose: false # if you whish to see all the noise this package makes 
+        dryrun: false # if you wish to try this package but not actually do anything
     };
 ```
 
