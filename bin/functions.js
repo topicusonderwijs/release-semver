@@ -199,8 +199,6 @@ const uptodateCheck = (options) => {
 const latestVersion = (options) => {
   spinner = ora(`Getting lastest version...`).start();
   let version = null;
-  // const ref = shell.exec(`git rev-parse --verify refs/remotes/${options.upstream}/${options.sourceBranch}`);
-  // checkShellResponse(options, spinner, ref);
   const tag = shell.exec(`git tag --sort=taggerdate | tail -1`);
 
   console.log(tag);
