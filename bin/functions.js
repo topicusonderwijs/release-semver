@@ -199,9 +199,9 @@ const uptodateCheck = (options) => {
 const latestVersion = (options) => {
   spinner = ora(`Getting lastest version...`).start();
   let version = null;
-  const tag = shell.exec(`git tag --sort=taggerdate | tail -1`);
+  const tags = shell.exec(`git tag --sort=taggerdate | egrep "/(release\/)?(v?)(\d+.\d+.\d+)"`);
 
-  console.log(tag);
+  console.log(tags.sort());
 
   if (tag.code !== 128) {
     version = semver.valid(semver.coerce(tag.stdout, { loose: true }));
