@@ -201,7 +201,7 @@ const latestVersion = (options) => {
   let version = null;
   const ref = shell.exec(`git rev-parse --verify refs/remotes/${options.upstream}/${options.sourceBranch}`);
   checkShellResponse(options, spinner, ref);
-  const tag = shell.exec(`git describe --tag ${ref} --sort=committerdate`);
+  const tag = shell.exec(`git describe --tag ${ref} --sort=taggerdate`);
 
   console.log(tag);
 
