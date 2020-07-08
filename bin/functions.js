@@ -204,6 +204,8 @@ const latestVersion = (options) => {
   checkShellResponse(options, spinner, ref);
   const tag = shell.exec(`git describe --tag ${ref}`);
 
+  console.log(tag);
+
   if (tag.code !== 128) {
     version = semver.valid(semver.coerce(tag.stdout, { loose: true }));
   }
