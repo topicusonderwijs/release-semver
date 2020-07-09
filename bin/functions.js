@@ -199,12 +199,20 @@ const uptodateCheck = (options) => {
 const latestVersion = (options) => {
   spinner = ora(`Getting lastest version...`).start();
   let version = null;
-  const tags = shell.exec(`git tag --sort=taggerdate | egrep "/(release\/)?(v?)(\d+.\d+.\d+)"`);
+  // Get tags, sort by date that tag was added and limit to last 50 for sanity
+  const tags = shell.exec(`git tag --sort=taggerdate | head -n 50`, { silent: true });
 
-  console.log(tags.sort());
+  if (tags.code !== 128) {
+    // Regex that matches anything that has a version number at the end
+    const regex = new RegExp(/.*(v)?(\d+\.\d+\.\d+)/);
 
-  if (tag.code !== 128) {
-    version = semver.valid(semver.coerce(tag.stdout, { loose: true }));
+    // Get the last tag that meets our criteria
+    const tag = tags.stdout
+      .split("\n")
+      .filter((a) => regex.test(a))
+      .pop();
+
+    version = semver.valid(semver.coerce(tag, { loose: true }));
   }
 
   if (version) {
