@@ -19,6 +19,16 @@ const gitOrQuit = () => {
   }
 };
 
+const currentBranch = () => {
+  const res = shell.exec(`git rev-parse --abbrev-ref HEAD`);
+  checkShellResponse(options, spinner, res);
+  return res.stdout;
+};
+
+const checkoutBranch = (branch) => {
+  shell.exec(`git checkout ${branch}`);
+};
+
 const getOptions = () => {
   const options = {
     sourceBranch: "master",
@@ -193,12 +203,13 @@ const uptodateCheck = (options) => {
     dryRunOrNoDryRun(options, () => shell.exit(1));
   }
 
-  spinner.succeed("Everything is uptodate.");
+  spinner.succeed("Everything is up to date.");
 };
 
 const latestVersion = (options) => {
   spinner = ora(`Getting lastest version...`).start();
   let version = null;
+  shell.exec(`git fetch ${options.upstream} ${options.sourceBranch} refs/tags/*:refs/tags/* --prune`);
   // Get tags, sort by date that tag was added and limit to last 50 for sanity
   const tags = shell.exec(`git tag --sort=taggerdate | head -n 50`, { silent: true });
 
@@ -337,6 +348,8 @@ module.exports = {
   getOptions,
   welcome,
   gitOrQuit,
+  currentBranch,
+  checkoutBranch,
   cleanWorkdir,
   updateRepo,
   sourceBranchCheck,

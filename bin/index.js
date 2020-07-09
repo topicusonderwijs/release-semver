@@ -17,7 +17,8 @@ const {
   incrementVersion,
   merge,
   tag,
-  push
+  push,
+  checkoutBranch
 } = require("./functions.js");
 
 const script = async () => {
@@ -26,7 +27,7 @@ const script = async () => {
   shell.config.verbose = options.verbose || options.dryrun;
   welcome(options);
   gitOrQuit();
-
+  const currentBranch = currentBranch();
   cleanWorkdir(options);
   updateRepo(options);
   sourceBranchCheck(options);
@@ -46,6 +47,7 @@ const script = async () => {
     tag(newVersion, options);
     push(newVersion, options);
   }
+  checkoutBranch(currentBranch);
 };
 
 script();
