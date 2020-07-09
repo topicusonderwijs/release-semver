@@ -19,8 +19,7 @@ const {
   incrementVersion,
   merge,
   tag,
-  push,
-  checkoutBranch
+  push
 } = require("./functions.js");
 
 const script = async () => {
