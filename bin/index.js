@@ -5,6 +5,8 @@ const {
   getOptions,
   welcome,
   gitOrQuit,
+  currentBranch,
+  checkoutBranch,
   cleanWorkdir,
   updateRepo,
   sourceBranchCheck,
@@ -27,7 +29,7 @@ const script = async () => {
   shell.config.verbose = options.verbose || options.dryrun;
   welcome(options);
   gitOrQuit();
-  const currentBranch = currentBranch();
+  const branch = currentBranch();
   cleanWorkdir(options);
   updateRepo(options);
   sourceBranchCheck(options);
@@ -47,7 +49,7 @@ const script = async () => {
     tag(newVersion, options);
     push(newVersion, options);
   }
-  checkoutBranch(currentBranch);
+  checkoutBranch(branch);
 };
 
 script();
