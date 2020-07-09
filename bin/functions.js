@@ -12,14 +12,14 @@ const welcome = (options) => {
   }
 };
 
-const gitOrQuit = () => {
+const gitOrQuit = (options) => {
   if (!shell.which("git")) {
     console.log(chalk.red("Could not find git, which is required for this script to run."));
     dryRunOrNoDryRun(options, () => shell.exit(1));
   }
 };
 
-const currentBranch = () => {
+const currentBranch = (options) => {
   const res = shell.exec(`git rev-parse --abbrev-ref HEAD`);
   checkShellResponse(options, spinner, res);
   return res.stdout;
@@ -317,7 +317,7 @@ const push = (newVersion, options) => {
   spinner.succeed(`Things got pushed. We're done. 🎉🎉🎉`);
 };
 
-const checkShellResponse = (options, spinner, res) => {
+const checkShellResponse = (options, spinner = ora, res) => {
   if (res && res.stderr && res.code !== 0) {
     if (spinner) {
       spinner.fail(`The following error occured:\n ${res.stderr}.`);

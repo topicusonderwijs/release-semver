@@ -27,8 +27,8 @@ const script = async () => {
   shell.config.silent = options.silent;
   shell.config.verbose = options.verbose || options.dryrun;
   welcome(options);
-  gitOrQuit();
-  const branch = currentBranch();
+  gitOrQuit(options);
+  const branch = currentBranch(options);
   cleanWorkdir(options);
   updateRepo(options);
   sourceBranchCheck(options);
