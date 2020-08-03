@@ -238,7 +238,7 @@ const latestVersion = (options) => {
 const incrementVersion = async (version) => {
   const cleanVersion = semver.parse(semver.clean(version));
   if (cleanVersion) {
-    const newVersion = await inquirer.prompt({
+    let newVersion = await inquirer.prompt({
       type: "list",
       name: "semver",
       message: "Select the new version:",
