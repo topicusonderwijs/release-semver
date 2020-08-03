@@ -254,10 +254,24 @@ const incrementVersion = async (version) => {
         {
           name: `major version (e.g. breaking changes): ${semver.inc(cleanVersion.version, "major")}`,
           value: semver.inc(cleanVersion.version, "major")
+        },
+        {
+          name: `Provide custom version`,
+          value: 0
         }
       ]
     });
-    return newVersion.semver;
+    let promptValue = newVersion.semver;
+    if (promptValue == 0) {
+      newVersion = await inquirer.prompt({
+        type: "input",
+        name: "semver",
+        message: "Enter the new version:"
+      });
+      promptValue = newVersion.semver;
+    }
+
+    return promptValue;
   }
 };
 
