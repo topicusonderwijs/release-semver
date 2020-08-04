@@ -1,0 +1,380 @@
+const chalk = require("chalk");
+const inquirer = require("inquirer");
+const ora = require("ora");
+const semver = require("semver");
+const trim = require("trim");
+const shell = require("shelljs");
+
+const welcome = (options) => {
+  console.log(chalk.black.bgGreen(`release-semver running`));
+  if (options.dryrun) {
+    console.log(`release-semver running in dry mode. Will fetch and checkout but not merge, tag or push.`);
+  }
+};
+
+const gitOrQuit = (options) => {
+  if (!shell.which("git")) {
+    console.log(chalk.red("Could not find git, which is required for this script to run."));
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+};
+
+const currentBranch = (options) => {
+  const res = shell.exec(`git rev-parse --abbrev-ref HEAD`);
+  checkShellResponse(options, null, res);
+  return res.stdout;
+};
+
+const checkoutBranch = (branch) => {
+  shell.exec(`git checkout ${branch}`);
+};
+
+const getOptions = () => {
+  const options = {
+    sourceBranch: "master",
+    targetBranch: "release",
+    upstream: "origin",
+    tagPattern: "",
+    prefix: false,
+    silent: true,
+    verbose: false,
+    dryrun: false
+  };
+
+  const availableOptionKeys = ["--sourceBranch", "--targetBranch", "--upstream", "--prefix", "--silent", "--verbose", "--dryrun"];
+  for (let i = 2; i < process.argv.length; i++) {
+    const optionKey = process.argv[i];
+    if (availableOptionKeys.find((val) => val === optionKey)) {
+      options[optionKey.split("--")[1]] = process.argv[i + 1];
+    }
+  }
+  return options;
+};
+
+const cleanWorkdir = (options) => {
+  const spinner = ora("Checking if working dir is clean...").start();
+
+  const res = shell.exec(`git status --porcelain | wc -l`);
+  checkShellResponse(options, spinner, res);
+  if (parseInt(trim(res.stdout)) > 0) {
+    spinner.fail("Working dir must be clean. Please stage and commit your changes.");
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+
+  spinner.succeed("Working dir is clean.");
+};
+
+const updateRepo = (options) => {
+  const spinner = ora("Updating repo...").start();
+
+  checkShellResponse(options, spinner, shell.exec(`git fetch ${options.upstream} --tags --prune`));
+
+  spinner.succeed("Repo updated.");
+};
+
+const sourceBranchCheck = (options) => {
+  let spinner = ora(`Checking if source branch '${options.sourceBranch}' exists...`).start();
+
+  let res = shell.exec(`git rev-parse --verify refs/heads/${options.sourceBranch}`);
+  if (res.stderr) {
+    spinner.color = "blue";
+    spinner.text = `Source branch '${options.sourceBranch}' does not exist locally, checking out...`;
+
+    checkShellResponse(
+      options,
+      spinner,
+      shell.exec(`git checkout -q -B ${options.sourceBranch} ${options.upstream}/${options.sourceBranch}`)
+    );
+
+    res = shell.exec(`git rev-parse --verify refs/heads/${options.sourceBranch}`);
+    if (res.stderr) {
+      spinner.fail(`Source branch '${options.sourceBranch}' does exist at upstream.`);
+      dryRunOrNoDryRun(options, () => shell.exit(1));
+    }
+  }
+  checkout(options, spinner, options.sourceBranch);
+  spinner.succeed(`Source branch '${options.sourceBranch}' found.`);
+};
+
+const targetBranchCheck = (options) => {
+  if (options.sourceBranch === options.targetBranch) {
+    return;
+  }
+
+  let spinner = ora(`Checking if target branch '${options.targetBranch}' exists...`).start();
+  res = shell.exec(`git rev-parse --verify refs/heads/${options.targetBranch}`);
+  if (res.stderr) {
+    spinner.color = "blue";
+    spinner.text = `Target branch '${options.targetBranch}' does not exist locally, checking out...`;
+
+    checkShellResponse(
+      options,
+      spinner,
+      shell.exec(`git checkout -q -B ${options.targetBranch} ${options.upstream}/${options.targetBranch}`)
+    );
+    res = shell.exec(`git rev-parse --verify refs/heads/${options.targetBranch}`);
+    if (res.stderr) {
+      spinner.fail(`Target branch '${options.targetBranch}' does not have an upstream.`);
+      dryRunOrNoDryRun(options, () => shell.exit(1));
+    }
+  }
+  spinner.succeed(`Target branch '${options.targetBranch}' found.`);
+};
+
+const sourceUpstreamCheck = (options) => {
+  let spinner = ora(`Checking if source branch ${options.sourceBranch} has upstream...`).start();
+
+  res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.sourceBranch}`);
+  checkShellResponse(options, spinner, res);
+  if (options.upstream + "/" + options.sourceBranch != trim(res.stdout)) {
+    spinner.fail(`Source branch '${options.sourceBranch}' does not have upstream '${options.upstream}'.`);
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+  spinner.succeed(`Source branch '${options.sourceBranch}' has upstream '${options.upstream}'.`);
+};
+
+const targetUpstreamCheck = (options) => {
+  if (options.sourceBranch === options.targetBranch) {
+    return;
+  }
+
+  let spinner = ora(`Checking if target branch ${options.targetBranch} has upstream...`).start();
+  res = shell.exec(`git for-each-ref --format="%(upstream:short)" refs/heads/${options.targetBranch}`);
+  checkShellResponse(options, spinner, res);
+  if (options.upstream + "/" + options.targetBranch != trim(res.stdout)) {
+    spinner.fail(`Target branch '${options.targetBranch}' does not have upstream '${options.upstream}'.`);
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+  spinner.succeed(`Target branch '${options.targetBranch}' has upstream '${options.upstream}'.`);
+};
+
+const fastForwardAll = (options) => {
+  let spinner = ora(`Synchronizing branches...`).start();
+  fastforward(options, spinner, options.sourceBranch);
+
+  if (options.sourceBranch !== options.targetBranch) {
+    fastforward(options, spinner, options.targetBranch);
+    checkout(options, spinner, options.sourceBranch);
+  }
+  spinner.succeed("Branches synchronized");
+};
+
+const checkout = (options, spinner, branch) => {
+  if (spinner) {
+    spinner.color = "blue";
+    spinner.text = `Checking out ${branch}...`;
+  }
+  checkShellResponse(options, spinner, shell.exec(`git checkout ${branch} -q`));
+};
+
+const fastforward = (options, spinner, branch) => {
+  if (spinner) {
+    spinner.color = "blue";
+    spinner.text = `Fast-forwarding ${branch}...`;
+  }
+  checkShellResponse(options, spinner, shell.exec(`git checkout ${branch} -q`));
+
+  let res = shell.exec(`git rev-list "refs/heads/${branch}..refs/remotes/${options.upstream}/${branch}"`);
+  checkShellResponse(options, spinner, res);
+  if (trim(res.stdout) !== "") {
+    spinner.fail(`${branch} has local commits; can't fast-forward`);
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+
+  res = shell.exec(`git merge --ff-only ${options.upstream}/${branch}`);
+  checkShellResponse(options, spinner, res);
+};
+
+const uptodateCheck = (options) => {
+  if (options.sourceBranch === options.targetBranch) {
+    return;
+  }
+
+  let spinner = ora(`Checking if ${options.sourceBranch} is uptodate with ${options.targetBranch}...`).start();
+
+  const res = shell.exec(`git rev-list "${options.sourceBranch}..${options.targetBranch}" --no-merges | wc -l`);
+  checkShellResponse(options, spinner, res);
+  if (parseInt(trim(res.stdout)) > 0) {
+    spinner.fail(
+      `Not all commits on ${options.targetBranch} are merged back into ${options.sourceBranch}.\n` +
+        `Please merge the following commits back into ${options.sourceBranch}:`
+    );
+    shell.exec(`git log --oneline --no-merges "${options.sourceBranch}..${options.targetBranch}"`, { silent: false });
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+
+  spinner.succeed("Everything is up to date.");
+};
+
+const latestVersion = (options) => {
+  spinner = ora(`Getting lastest version...`).start();
+  let version = null;
+  shell.exec(`git fetch ${options.upstream} ${options.sourceBranch} refs/tags/*:refs/tags/* --prune`);
+  // Get tags, sort by date that tag was added and limit to last 50 for sanity
+  const tags = shell.exec(`git tag --sort=taggerdate | head -n 50`, { silent: true });
+
+  if (tags.code !== 128) {
+    // Regex that matches anything that has a version number at the end
+    const regex = new RegExp(/.*(v)?(\d+\.\d+\.\d+)/);
+
+    // Get the last tag that meets our criteria
+    const tag = tags.stdout
+      .split("\n")
+      .filter((a) => regex.test(a))
+      .pop();
+
+    version = semver.valid(semver.coerce(tag, { loose: true }));
+  }
+
+  if (version) {
+    spinner.succeed(`Latest version is ${version}.`);
+  } else {
+    spinner.info(`No version found, starting with 0.0.0.`);
+  }
+
+  return version;
+};
+
+const incrementVersion = async (version) => {
+  const cleanVersion = semver.parse(semver.clean(version));
+  if (cleanVersion) {
+    let newVersion = await inquirer.prompt({
+      type: "list",
+      name: "semver",
+      message: "Select the new version:",
+      choices: [
+        {
+          value: semver.inc(cleanVersion.version, "patch"),
+          name: `patch version (e.g. bug fixes): ${semver.inc(cleanVersion.version, "patch")}`
+        },
+        {
+          name: `minor version (e.g. new functionality, no breaking changes): ${semver.inc(cleanVersion.version, "minor")}`,
+          value: semver.inc(cleanVersion.version, "minor")
+        },
+        {
+          name: `major version (e.g. breaking changes): ${semver.inc(cleanVersion.version, "major")}`,
+          value: semver.inc(cleanVersion.version, "major")
+        },
+        {
+          name: `Provide custom version`,
+          value: 0
+        }
+      ]
+    });
+    let promptValue = newVersion.semver;
+    if (promptValue == 0) {
+      newVersion = await inquirer.prompt({
+        type: "input",
+        name: "semver",
+        message: "Enter the new version:"
+      });
+      promptValue = newVersion.semver;
+    }
+
+    return promptValue;
+  }
+};
+
+const merge = (newVersion, options) => {
+  if (options.sourceBranch === options.targetBranch) {
+    return;
+  }
+
+  let spinner = ora(`Merging ${options.sourceBranch} into ${options.targetBranch}`).start();
+  checkout(options, spinner, options.targetBranch);
+  const prefix = options.prefix ? options.prefix + "/" : "";
+  checkShellResponse(
+    options,
+    spinner,
+    shellExecOrDryrun(
+      options,
+      `git merge --no-ff -m "Merge branch 'master' into release for '${prefix}${newVersion}'" ${options.sourceBranch}`
+    )
+  );
+
+  spinner.succeed(`Merged ${options.sourceBranch} into ${options.targetBranch}`);
+};
+
+const tag = (newVersion, options) => {
+  let spinner = ora(`Tagging release...`).start();
+  const prefix = options.prefix ? options.prefix + "/" : "";
+  checkShellResponse(
+    options,
+    spinner,
+    shellExecOrDryrun(
+      options,
+      `git tag -a ${prefix}${newVersion} ${options.targetBranch} ` +
+        `-m "Version ${prefix}${newVersion} released on ${new Date().toLocaleDateString()}"`
+    )
+  );
+  spinner.succeed(`Release tagged.`);
+};
+
+const push = (newVersion, options) => {
+  const prefix = options.prefix ? options.prefix + "/" : "";
+
+  let spinner = ora(`Pushing stuff to upstream '${options.upstream}'...`).start();
+  if (options.sourceBranch === options.targetBranch) {
+    checkShellResponse(
+      options,
+      spinner,
+      shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${prefix}${newVersion}`)
+    );
+  } else {
+    checkShellResponse(
+      options,
+      spinner,
+      shellExecOrDryrun(options, `git push ${options.upstream} ${options.sourceBranch} ${options.targetBranch} ${prefix}${newVersion}`)
+    );
+  }
+
+  spinner.succeed(`Things got pushed. We're done. 🎉🎉🎉`);
+};
+
+const checkShellResponse = (options, spinner, res) => {
+  if (res && res.stderr && res.code !== 0) {
+    if (spinner) {
+      spinner.fail(`The following error occured:\n ${res.stderr}.`);
+    } else {
+      console.log(chalk.red.italic(`The following error occured:`));
+      console.log(chalk.red(res.stderr));
+    }
+    dryRunOrNoDryRun(options, () => shell.exit(1));
+  }
+};
+
+const dryRunOrNoDryRun = (options, callback) => {
+  if (!options.dryrun) {
+    callback();
+  }
+};
+
+const shellExecOrDryrun = (options, exec) => {
+  if (!options.dryrun) {
+    return shell.exec(exec);
+  }
+  console.log(`dryrun: '${exec}'`);
+
+  return null;
+};
+
+module.exports = {
+  getOptions,
+  welcome,
+  gitOrQuit,
+  currentBranch,
+  checkoutBranch,
+  cleanWorkdir,
+  updateRepo,
+  sourceBranchCheck,
+  targetBranchCheck,
+  sourceUpstreamCheck,
+  targetUpstreamCheck,
+  fastForwardAll,
+  uptodateCheck,
+  latestVersion,
+  incrementVersion,
+  merge,
+  tag,
+  push
+};
